@@ -1,0 +1,28 @@
+version: '3'
+services:
+  flaskapp:
+    build: .
+    env_file:
+      - env_file
+    volumes:
+      - .:/opt/services/flaskapp/src
+      - "data:/opt/data"
+    networks:
+      - web_nw
+  nginx:
+    image: "nginx"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d
+      - ./certs:/etc/nginx/certs
+    networks:
+      - web_nw
+    depends_on: 
+      - flaskapp
+networks:
+  web_nw:
+    driver: bridge
+volumes:
+  data:
