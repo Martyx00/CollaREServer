@@ -408,7 +408,9 @@ def add_project_user():
         return "PROJECT_DOES_NOT_EXIST"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    manifest_data["users"].extend(request_data["users"])
+    for user in request_data["users"]:
+        if user not in manifest_data["users"] and user in users.keys():
+            manifest_data["users"].append(user)
     write_project_manifest(project,manifest_data)
     return 'DONE'
 
