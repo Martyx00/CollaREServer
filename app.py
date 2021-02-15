@@ -111,6 +111,7 @@ def checkout_db_file():
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
+    print(f"/opt/data/{'/'.join(path)}/{file_name}",file=sys.stderr)
     if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
     wait_for_unlock()
@@ -312,7 +313,7 @@ def delete_file():
             return "CHECKEDOUT_FILE"
         reduce(dict.get,path,manifest_data)["__rev_dbs__"].pop(filename)
         path = path + [sanitized_filename]
-        remove_path = os.path.splitext(os.path.join("/opt/data",*path))[0] + f".{filename}"
+        remove_path = os.path.join("/opt/data",*path) + f".{filename}"
         os.remove(remove_path)
     else:
         # Whole file has to go
