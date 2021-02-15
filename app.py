@@ -83,7 +83,7 @@ def verify_password(username, password):
 @auth.login_required
 def open_db_file():
     request_data = request.json
-    project = request_data["project"]   
+    project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'][:-1]) + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
     if project not in projects:
@@ -94,6 +94,7 @@ def open_db_file():
         return "FILE_DOES_NOT_EXIST"
     manifest_data = read_project_manifest(project)
     if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] == auth.current_user():
+        # Avoid returning a new file which would overwrite local changes
         return "FILE_ALREADY_CHECKEDOUT"
     with open(f"/opt/data/{'/'.join(path)}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
@@ -103,7 +104,7 @@ def open_db_file():
 @auth.login_required
 def checkout_db_file():
     request_data = request.json
-    project = request_data["project"]   
+    project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'][:-1]) + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
     if project not in projects:
@@ -127,9 +128,9 @@ def checkout_db_file():
 @auth.login_required
 def checkin_db_file():
     request_data = request.json
-    project = request_data["project"]
+    project = re.sub(r'\W+', '', request_data['project'])
     path = sanitize_path(request_data['path'])[:-1]
-    path = path + [request_data['path'][-1]]
+    path = path + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
@@ -142,7 +143,6 @@ def checkin_db_file():
     if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != auth.current_user():
         return  "FILE_NOT_CHECKEDOUT"
     reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = None
-    #reduce(dict.get,path,manifest_data)["__locked__"] = None
     write_project_manifest(project,manifest_data)
     with open(f"/opt/data/{'/'.join(path)}/{file_name}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
@@ -153,7 +153,7 @@ def checkin_db_file():
 @auth.login_required
 def undo_checkout():
     request_data = request.json
-    project = request_data["project"]   
+    project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'][:-1]) + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
     if project not in projects:
@@ -176,15 +176,16 @@ def undo_checkout():
 @auth.login_required
 def getfile():
     request_data = request.json
-    project = request_data["project"]   
+    project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'])
+    filename = request_data['file_name'].replace("..","")
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
-    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}"):
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{filename}"):
         return "FILE_DOES_NOT_EXIST"
-    with open(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}/{request_data['file_name']}", "rb") as data_file:
+    with open(f"/opt/data/{'/'.join(path)}/{filename}/{filename}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
     return jsonify({"file":encoded_file.decode("utf-8")})
 
@@ -193,7 +194,7 @@ def getfile():
 @auth.login_required
 def push():
     request_data = request.json
-    project = request_data["project"]
+    project = re.sub(r'\W+', '', request_data['project'])
     path = sanitize_path(request_data['path'])
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
@@ -215,12 +216,12 @@ def push():
 @auth.login_required
 def push_db_file():
     request_data = request.json
-    project = request_data["project"]
+    project = re.sub(r'\W+', '', request_data['project'])
     path = sanitize_path(request_data['path'])[:-1]
-    path = path + [request_data['path'][-1]]
+    path = path + [request_data['path'][-1].replace("..","")]
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
-    if not is_authorized(project,auth.current_user()) or ".." in request_data['path'][-1]:
+    if not is_authorized(project,auth.current_user()) or ".." in request_data['file_name']:
         return "UNAUTHORIZED"
     if os.path.exists(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}"):
         return "FILE_ALREADY_EXISTS"
@@ -350,9 +351,12 @@ def create_project():
         return "ALREADY_EXISTS"
     os.mkdir(f"/opt/data/{project}")
     manifest_content = {
-        "users": request_data["users"],
+        "users": [],
         f"{project}": {"__file__type__":False}
     }
+    for user in request_data["users"]:
+        if user not in manifest_content["users"] and user in users.keys():
+            manifest_content["users"].append(user)
     with open(f"/opt/data/{project}/manifest.json","w") as project_manifest:
         json.dump(manifest_content, project_manifest)
     projects.append(project)
@@ -390,12 +394,6 @@ def open_project():
         manifest_data = json.load(project_manifest)
     return jsonify(manifest_data)
 
-@app.route('/refresh')
-@auth.login_required
-def refresh_project():
-    print(str(users), file=sys.stderr)
-    return 'Hello, World!'
-
 # Works
 @app.route('/addprojectusers', methods=["POST"])
 @auth.login_required
@@ -424,7 +422,7 @@ def get_userlist():
 @app.route('/getprojectusers')
 @auth.login_required
 def get_project_userlist():
-    project = request.args.get('project')
+    project = re.sub(r'\W+', '', request.args.get('project'))
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
     return jsonify({"users":read_project_manifest(project)["users"]})
@@ -445,11 +443,6 @@ def delete_project_user():
         manifest_data["users"].remove(user)
     write_project_manifest(project,manifest_data)
     return 'DONE'
-
-@app.route('/')
-def hello_world():
-    print(str(users), file=sys.stderr)
-    return 'Hello, World!'
 
 # Works
 @app.route('/ping')
