@@ -462,6 +462,30 @@ def add_user():
     return "DONE"
 
 # Works
+@app.route('/deluser',methods=['POST'])
+@auth.login_required
+def delete_user():
+    if auth.current_user() != 'admin':
+        return 'UNAUTHORIZED'
+    request_data = request.json
+    for user in request_data["users"]:
+        # Delete only non-admins
+        if user != "admin":
+            users.pop(user)
+    for prj in projects:
+        wait_for_unlock()
+        manifest_data = read_project_manifest(prj.strip())
+        for user in request_data["users"]:
+            if user in manifest_data["users"]:
+                manifest_data["users"].remove(user)
+            if len(manifest_data["users"]) == 0:
+                # Auto append admin for projects with no users
+                manifest_data["users"].append("admin")
+        write_project_manifest(prj.strip(),manifest_data)
+    dump_users_to_file()
+    return "DONE"
+
+# Works
 @app.route('/changepwd',methods=['POST'])
 @auth.login_required
 def change_pwd():
