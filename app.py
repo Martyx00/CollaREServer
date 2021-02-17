@@ -133,18 +133,20 @@ def checkin_db_file():
     path = sanitize_path(request_data['path'])[:-1]
     path = path + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
+    checkout = request_data["checkout"]
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()) or ".." in request_data['path'][-1]:
         return "UNAUTHORIZED"
     if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
-    wait_for_unlock()
-    manifest_data = read_project_manifest(project)
-    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != auth.current_user():
-        return  "FILE_NOT_CHECKEDOUT"
-    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = None
-    write_project_manifest(project,manifest_data)
+    if not checkout:
+        wait_for_unlock()
+        manifest_data = read_project_manifest(project)
+        if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != auth.current_user():
+            return  "FILE_NOT_CHECKEDOUT"
+        reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = None
+        write_project_manifest(project,manifest_data)
     with open(f"/opt/data/{'/'.join(path)}/{file_name}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
     return "DONE"
