@@ -264,6 +264,36 @@ def mkdir():
     os.mkdir(f"/opt/data/{'/'.join(path)}/{dirname}")
     return 'DONE'
 
+# Works
+@app.route('/rename',methods=["POST"])
+@auth.login_required
+def rename_dir():
+    '''
+    {
+        "project": "some",
+        "path": ["project_name","folder1"],
+        "dirname": "newDir"
+    }
+    '''
+    request_data = request.json
+    project = re.sub(r'\W+', '', request_data['project'])
+    if project not in projects:
+        return "PROJECT_DOES_NOT_EXIST"
+    dirname = re.sub(r'\W+', '', request_data['dirname'])
+    path = sanitize_path(request_data['path'])
+    if not is_authorized(project,auth.current_user()):
+        return "UNAUTHORIZED"
+    if os.path.exists(f"/opt/data/{'/'.join(path[:-1])}/{dirname}"):
+        return "FOLDER_ALREADY_EXISTS"
+    wait_for_unlock()
+    manifest_data = read_project_manifest(project)
+    old_folder = reduce(dict.get,path[:-1],manifest_data).pop(path[-1])
+    reduce(dict.get,path[:-1],manifest_data)[dirname] = old_folder
+    write_project_manifest(project,manifest_data)
+    shutil.move(os.path.join("/opt/data",*path), os.path.join("/opt/data",*path[:-1],dirname))
+    #os.mkdir(f"/opt/data/{'/'.join(path)}/{dirname}")
+    return 'DONE'
+
 # works
 @app.route('/deletedir',methods=["POST"])
 @auth.login_required
