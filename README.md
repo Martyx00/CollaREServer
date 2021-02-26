@@ -1,4 +1,4 @@
-# CollaREServer
+# CollaREServer v0.1
 
 ![CollaRE](https://raw.githubusercontent.com/Martyx00/CollaRE/master/collare/icons/collare-full-white.png)
 
