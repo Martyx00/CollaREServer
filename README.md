@@ -19,7 +19,7 @@ The whole server is very simple Flask application with an Nginx in front of it. 
 
 ## Roadmap
 
-**v0.1** - Initial BETA release
-**v0.2** - BETA release with DB files versioning support
-**v0.3** - BETA release with comments/function names sync between DBs (PoC with two tools)
-**v1.0** - Initial production ready release with all major features implemented
+* **v0.1** - Initial BETA release
+* **v0.2** - BETA release with DB files versioning support
+* **v0.3** - BETA release with comments/function names sync between DBs (PoC with two tools)
+* **v1.0** - Initial production ready release with all major features implemented
