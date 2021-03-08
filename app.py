@@ -5,6 +5,7 @@ import sys
 import re
 import shutil
 import base64
+import glob
 from functools import reduce
 
 from flask import Flask, redirect, url_for,request, send_from_directory, send_file, request, jsonify
@@ -66,7 +67,7 @@ def has_checkedout_child(folder_dict):
         else:
             # file
             for key in current_node["__rev_dbs__"]:
-                if current_node["__rev_dbs__"][key]:
+                if current_node["__rev_dbs__"][key]["checked-out"]:
                     return True
     return False
         
@@ -86,17 +87,21 @@ def open_db_file():
     project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'][:-1]) + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
+    version = request_data['version']
+    if not type(version) is int:
+        return "UNAUTHORIZED"
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
-    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{version}/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
+    
     manifest_data = read_project_manifest(project)
-    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] == auth.current_user():
+    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] == auth.current_user():
         # Avoid returning a new file which would overwrite local changes
         return "FILE_ALREADY_CHECKEDOUT"
-    with open(f"/opt/data/{'/'.join(path)}/{file_name}", "rb") as data_file:
+    with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
     return jsonify({"file":encoded_file.decode("utf-8")})
 
@@ -104,6 +109,7 @@ def open_db_file():
 @auth.login_required
 def checkout_db_file():
     request_data = request.json
+    version = request_data['version']
     project = re.sub(r'\W+', '', request_data['project'])   
     path = sanitize_path(request_data['path'][:-1]) + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
@@ -111,16 +117,18 @@ def checkout_db_file():
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
+    if not type(version) is int:
+        return "UNAUTHORIZED"
     print(f"/opt/data/{'/'.join(path)}/{file_name}",file=sys.stderr)
-    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{version}/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != None:
+    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] != None:
         return "FILE_ALREADY_CHECKEDOUT"
-    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = auth.current_user()
+    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] = auth.current_user()
     write_project_manifest(project,manifest_data)
-    with open(f"/opt/data/{'/'.join(path)}/{file_name}", "rb") as data_file:
+    with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
     return jsonify({"file":encoded_file.decode("utf-8")})
     
@@ -134,20 +142,27 @@ def checkin_db_file():
     path = path + [request_data['path'][-1].replace("..","")]
     file_name = request_data['file_name'].replace("..","")
     checkout = request_data["checkout"]
+    comment = request_data["comment"]
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()) or ".." in request_data['path'][-1]:
         return "UNAUTHORIZED"
-    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}"):
         return "FILE_DOES_NOT_EXIST"
+    wait_for_unlock()
+    manifest_data = read_project_manifest(project)
+    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] != auth.current_user():
+        return  "FILE_NOT_CHECKEDOUT"
+    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["latest"] += 1
+    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["versions"].append(comment)
     if not checkout:
-        wait_for_unlock()
-        manifest_data = read_project_manifest(project)
-        if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != auth.current_user():
-            return  "FILE_NOT_CHECKEDOUT"
-        reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = None
-        write_project_manifest(project,manifest_data)
-    with open(f"/opt/data/{'/'.join(path)}/{file_name}","wb") as dest_file:
+        reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] = None
+    write_project_manifest(project,manifest_data)
+    
+    latest = reduce(dict.get,path,manifest_data)['__rev_dbs__'][os.path.splitext(file_name)[1][1:]]['latest']
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{latest}"):
+        os.mkdir(f"/opt/data/{'/'.join(path)}/{latest}")
+    with open(f"/opt/data/{'/'.join(path)}/{latest}/{file_name}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
     return "DONE"
 
@@ -164,13 +179,13 @@ def undo_checkout():
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
     print(f"/opt/data/{'/'.join(path)}/{file_name}",file=sys.stderr)
-    if not os.path.exists(f"/opt/data/{'/'.join(path)}/{file_name}"):
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/0/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] != auth.current_user():
+    if reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] != auth.current_user():
         return "FILE_NOT_CHECKEDOUT"
-    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]] = None
+    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(file_name)[1][1:]]["checked-out"] = None
     write_project_manifest(project,manifest_data)
     return "DONE"
 
@@ -226,13 +241,17 @@ def push_db_file():
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()) or ".." in request_data['file_name']:
         return "UNAUTHORIZED"
-    if os.path.exists(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}"):
+    if os.path.exists(f"/opt/data/{'/'.join(path)}/0/{request_data['file_name']}"):
         return "FILE_ALREADY_EXISTS"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(request_data['file_name'])[1][1:]] = None
+    # "versions" is ordered list of comments assigned to each version, "latest" holds the index of the latest version for the given file 
+    reduce(dict.get,path,manifest_data)["__rev_dbs__"][os.path.splitext(request_data['file_name'])[1][1:]] = {"checked-out":None,"latest":0,"versions":["Init"]}
     write_project_manifest(project,manifest_data)
-    with open(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}","wb") as dest_file:
+    # Pushing DB is always first operation so push to folder "0"
+    if not os.path.exists(f"/opt/data/{'/'.join(path)}/0"):
+        os.mkdir(f"/opt/data/{'/'.join(path)}/0")
+    with open(f"/opt/data/{'/'.join(path)}/0/{request_data['file_name']}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
     return "DONE"
 
@@ -341,17 +360,19 @@ def delete_file():
     if filename in ["hop","i64","bndb","rzdb","ghdb","jdb2"]:
         sanitized_filename = request_data['path'][-1].replace("..","")
         path = sanitize_path(request_data['path'][:-1]) + [sanitized_filename]
-        if reduce(dict.get,path,manifest_data)["__rev_dbs__"][filename]:
+        if reduce(dict.get,path,manifest_data)["__rev_dbs__"][filename]["checked-out"]:
             return "CHECKEDOUT_FILE"
         reduce(dict.get,path,manifest_data)["__rev_dbs__"].pop(filename)
-        path = path + [sanitized_filename]
-        remove_path = os.path.join("/opt/data",*path) + f".{filename}"
-        os.remove(remove_path)
+        for (dirname, dirs, files) in os.walk(os.path.join(os.path.join("/opt/data",*path))):
+            for file in files:
+                if file.endswith(f".{filename}"):
+                    source_file = os.path.join(dirname, file)
+                    os.remove(source_file)
     else:
         # Whole file has to go
         path = sanitize_path(request_data['path'])
         for db_file in reduce(dict.get,path + [filename],manifest_data)["__rev_dbs__"]:
-            if reduce(dict.get,path + [filename],manifest_data)["__rev_dbs__"][db_file]:
+            if reduce(dict.get,path + [filename],manifest_data)["__rev_dbs__"][db_file]["checked-out"]:
                 return "CHECKEDOUT_FILE"
         reduce(dict.get,path,manifest_data).pop(f"{filename}")
         shutil.rmtree(f"/opt/data/{'/'.join(path)}/{filename}")
