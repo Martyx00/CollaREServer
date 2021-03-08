@@ -1,4 +1,4 @@
-# CollaREServer v0.1
+# CollaREServer v0.2
 
 ![CollaRE](https://raw.githubusercontent.com/Martyx00/CollaRE/master/collare/icons/collare-full-white.png)
 
@@ -16,3 +16,10 @@ Make sure to keep the certificate file as all clients connecting to the server w
 ## How it works
 
 The whole server is very simple Flask application with an Nginx in front of it. The only operations it performs is creating and deleting appropriate files. No database is connect.
+
+## Roadmap
+
+**v0.1** - Initial BETA release
+**v0.2** - BETA release with DB files versioning support
+**v0.3** - BETA release with comments/function names sync between DBs (PoC with two tools)
+**v1.0** - Initial production ready release with all major features implemented
