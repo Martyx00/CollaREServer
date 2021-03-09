@@ -103,7 +103,10 @@ def open_db_file():
         return "FILE_ALREADY_CHECKEDOUT"
     with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
-    return jsonify({"file":encoded_file.decode("utf-8")})
+    # TODO include changes.json
+    with open(f"/opt/data/{'/'.join(path)}/changes.json", "r") as changes_file:
+        changes_content = base64.b64encode(changes_file.read().encode())
+    return jsonify({"file":encoded_file.decode("utf-8"),"changes":changes_content.decode("utf-8")})
 
 @app.route('/checkout',methods=["POST"])
 @auth.login_required
@@ -130,7 +133,10 @@ def checkout_db_file():
     write_project_manifest(project,manifest_data)
     with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
-    return jsonify({"file":encoded_file.decode("utf-8")})
+    # TODO include changes.json
+    with open(f"/opt/data/{'/'.join(path)}/changes.json", "r") as changes_file:
+        changes_content = base64.b64encode(changes_file.read().encode())
+    return jsonify({"file":encoded_file.decode("utf-8"),"changes":changes_content.decode("utf-8")})
     
 
 @app.route('/checkin',methods=["POST"])
@@ -143,6 +149,7 @@ def checkin_db_file():
     file_name = request_data['file_name'].replace("..","")
     checkout = request_data["checkout"]
     comment = request_data["comment"]
+    
     if project not in projects:
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()) or ".." in request_data['path'][-1]:
@@ -164,6 +171,10 @@ def checkin_db_file():
         os.mkdir(f"/opt/data/{'/'.join(path)}/{latest}")
     with open(f"/opt/data/{'/'.join(path)}/{latest}/{file_name}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
+    # TODO write changes.json
+    with open(f"/opt/data/{'/'.join(path)}/changes.json","w") as changes_file:
+        changes_content = base64.b64decode(request_data["changes"])
+        changes_file.write(changes_content.decode("utf-8"))
     return "DONE"
 
 # Works
@@ -227,6 +238,8 @@ def push():
     os.mkdir(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}")
     with open(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}/{request_data['file_name']}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
+    with open(f"/opt/data/{'/'.join(path)}/{request_data['file_name']}/changes.json","wb") as dest_file:
+        dest_file.write(b'{"comments":{},"function_names":{}}')
     return "DONE"
 
 # Works
