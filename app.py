@@ -380,7 +380,7 @@ def delete_file():
         return "UNAUTHORIZED"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    if filename in ["hop","i64","bndb","rzdb","ghdb","jdb2"]:
+    if filename in ["hop","i64","idb","bndb","rzdb","ghdb","jdb2"]:
         sanitized_filename = request_data['path'][-1].replace("..","")
         path = sanitize_path(request_data['path'][:-1]) + [sanitized_filename]
         if reduce(dict.get,path,manifest_data)["__rev_dbs__"][filename]["checked-out"]:
