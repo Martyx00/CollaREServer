@@ -177,14 +177,14 @@ def checkin_db_file():
     with open(f"/opt/data/{'/'.join(path)}/changes.json","w") as changes_file:
         changes_content = base64.b64decode(request_data["changes"])
         changes_data = json.loads(changes_content)
-        previous_changes["function_names"].update(changes_data["function_names"])
+        '''previous_changes["function_names"].update(changes_data["function_names"])
         for comment in changes_data["comments"]:
             if comment in previous_changes["comments"] and previous_changes["comments"][comment] != "":
                 if previous_changes["comments"][comment] != changes_data["comments"][comment]:
                     previous_changes["comments"][comment] = f'{previous_changes["comments"][comment]}; {changes_data["comments"][comment]}'
             else:
-                previous_changes["comments"][comment] = changes_data["comments"][comment]
-        json.dump(previous_changes,changes_file)
+                previous_changes["comments"][comment] = changes_data["comments"][comment]'''
+        json.dump(changes_data,changes_file)
     return "DONE"
 
 # Works
