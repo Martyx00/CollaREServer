@@ -122,7 +122,6 @@ def checkout_db_file():
         return "UNAUTHORIZED"
     if not type(version) is int:
         return "UNAUTHORIZED"
-    print(f"/opt/data/{'/'.join(path)}/{file_name}",file=sys.stderr)
     if not os.path.exists(f"/opt/data/{'/'.join(path)}/{version}/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
     wait_for_unlock()
@@ -199,7 +198,6 @@ def undo_checkout():
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
-    print(f"/opt/data/{'/'.join(path)}/{file_name}",file=sys.stderr)
     if not os.path.exists(f"/opt/data/{'/'.join(path)}/0/{file_name}"):
         return "FILE_DOES_NOT_EXIST"
     wait_for_unlock()
@@ -380,7 +378,7 @@ def delete_file():
         return "UNAUTHORIZED"
     wait_for_unlock()
     manifest_data = read_project_manifest(project)
-    if filename in ["hop","i64","idb","bndb","rzdb","ghdb","jdb2"]:
+    if filename in ["hop","i64","idb","bndb","rzdb","ghdb","jdb2","asp"]:
         sanitized_filename = request_data['path'][-1].replace("..","")
         path = sanitize_path(request_data['path'][:-1]) + [sanitized_filename]
         if reduce(dict.get,path,manifest_data)["__rev_dbs__"][filename]["checked-out"]:
