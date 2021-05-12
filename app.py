@@ -52,23 +52,27 @@ def wait_for_unlock():
     while manifest_lock:
         pass
 
+# TODO error with some moves
 def has_checkedout_child(folder_dict):
     mag = []
     for key in folder_dict:
-        if key != "__file__type__":
+        if key not in ["__file__type__","__locked__","__rev_dbs__"]:
             mag.append(folder_dict[key])
+        else:
+            mag.append(folder_dict)
     while mag:
         current_node = mag.pop()
-        if not current_node["__file__type__"]:
-            # directory
-            for key in current_node:
-                if key != "__file__type__":
-                    mag.append(current_node[key])
-        else:
-            # file
-            for key in current_node["__rev_dbs__"]:
-                if current_node["__rev_dbs__"][key]["checked-out"]:
-                    return True
+        if current_node:
+            if not current_node["__file__type__"]:
+                # directory
+                for key in current_node:
+                    if key != "__file__type__":
+                        mag.append(current_node[key])
+            else:
+                # file
+                for key in current_node["__rev_dbs__"]:
+                    if current_node["__rev_dbs__"][key]["checked-out"]:
+                        return True
     return False
         
 
@@ -103,7 +107,6 @@ def open_db_file():
         return "FILE_ALREADY_CHECKEDOUT"
     with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
-    # TODO include changes.json
     with open(f"/opt/data/{'/'.join(path)}/changes.json", "r") as changes_file:
         changes_content = base64.b64encode(changes_file.read().encode())
     return jsonify({"file":encoded_file.decode("utf-8"),"changes":changes_content.decode("utf-8")})
@@ -132,7 +135,6 @@ def checkout_db_file():
     write_project_manifest(project,manifest_data)
     with open(f"/opt/data/{'/'.join(path)}/{version}/{file_name}", "rb") as data_file:
         encoded_file = base64.b64encode(data_file.read())
-    # TODO include changes.json
     with open(f"/opt/data/{'/'.join(path)}/changes.json", "r") as changes_file:
         changes_content = base64.b64encode(changes_file.read().encode())
     return jsonify({"file":encoded_file.decode("utf-8"),"changes":changes_content.decode("utf-8")})
@@ -170,7 +172,6 @@ def checkin_db_file():
         os.mkdir(f"/opt/data/{'/'.join(path)}/{latest}")
     with open(f"/opt/data/{'/'.join(path)}/{latest}/{file_name}","wb") as dest_file:
         dest_file.write(base64.b64decode(request_data['file']))
-    # TODO write changes.json
     with open(f"/opt/data/{'/'.join(path)}/changes.json", "r") as previous_changes_file:
         previous_changes = json.load(previous_changes_file)
     with open(f"/opt/data/{'/'.join(path)}/changes.json","w") as changes_file:
@@ -185,6 +186,33 @@ def checkin_db_file():
                 previous_changes["comments"][comment] = changes_data["comments"][comment]'''
         json.dump(changes_data,changes_file)
     return "DONE"
+
+# Works
+@app.route('/move',methods=["POST"])
+@auth.login_required
+def move():
+    request_data = request.json
+    project = request_data['project_name']
+    if project not in projects:
+        return "PROJECT_DOES_NOT_EXIST"
+    if not is_authorized(project,auth.current_user()):
+        return "UNAUTHORIZED"
+    source_path_list = sanitize_path(request_data['source_path'])
+    dest_path_list = sanitize_path(request_data['dest_path'])
+    source_path = os.path.join(f"/opt/data/",os.path.join(*source_path_list))
+    dest_path = os.path.join(f"/opt/data/", os.path.join(*dest_path_list),source_path_list[-1])
+    wait_for_unlock()
+    manifest_data = read_project_manifest(project)
+    if has_checkedout_child(reduce(dict.get,source_path_list,manifest_data)):
+        return "CHECKEDOUT_FILE"
+    if reduce(dict.get,dest_path_list + [source_path_list[-1]],manifest_data):
+        return "ALREADY_EXISTS"
+    manifest_source = reduce(dict.get,source_path_list[:-1],manifest_data).pop(source_path_list[-1])
+    reduce(dict.get,dest_path_list,manifest_data)[source_path_list[-1]] = manifest_source
+    shutil.move(source_path,dest_path)
+    write_project_manifest(project,manifest_data)
+    return "DONE"
+
 
 # Works
 @app.route('/undocheckout',methods=["POST"])
