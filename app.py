@@ -52,9 +52,10 @@ def wait_for_unlock():
     while manifest_lock:
         pass
 
-# TODO error with some moves
 def has_checkedout_child(folder_dict):
     mag = []
+    if folder_dict == None:
+        return False
     for key in folder_dict:
         if key not in ["__file__type__","__locked__","__rev_dbs__"]:
             mag.append(folder_dict[key])
@@ -197,8 +198,8 @@ def move():
         return "PROJECT_DOES_NOT_EXIST"
     if not is_authorized(project,auth.current_user()):
         return "UNAUTHORIZED"
-    source_path_list = sanitize_path(request_data['source_path'])
-    dest_path_list = sanitize_path(request_data['dest_path'])
+    source_path_list = sanitize_path(request_data['source_path'][:-1]) + [request_data['source_path'][-1].replace("..","")]
+    dest_path_list = sanitize_path(request_data['dest_path'][:-1]) + [request_data['dest_path'][-1].replace("..","")]
     source_path = os.path.join(f"/opt/data/",os.path.join(*source_path_list))
     dest_path = os.path.join(f"/opt/data/", os.path.join(*dest_path_list),source_path_list[-1])
     wait_for_unlock()
